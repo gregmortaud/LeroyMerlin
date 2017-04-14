@@ -212,6 +212,13 @@ function loadPage(searchLinkUrl, result, callback) {
 
 var crawl = function(searchLinkUrl, cb)
 {
+	var jsonFile = null;
+	if (process.argv.length < 3) {
+		jsonFile = "leroymerlin.json";
+	}
+	else {
+		jsonFile = process.argv[2] + ".json";
+	}
 	var productObject = {
 		name: null,
 		price: null,
@@ -221,6 +228,7 @@ var crawl = function(searchLinkUrl, cb)
 		categorie3: null
 	};
 	var result = {
+		fileName: jsonFile,
 		error: null,
 		siteName: 'LeroyMerlin',
 		cb: cb,
