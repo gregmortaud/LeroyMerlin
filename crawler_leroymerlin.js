@@ -243,6 +243,8 @@ function loadPage(searchLinkUrl, result, callback) {
 
 var crawl = function(searchLinkUrl, cb)
 {
+	cb();
+	return ;
 	var jsonFile = null;
 	if (process.argv.length < 3) {
 		jsonFile = "leroymerlin.json";
@@ -314,7 +316,7 @@ crawl({
 
 }, function (e)
 {
-	console.log("-----------------------------------------------------");
-	console.log(e);
+	console.log("--------------------------Crawler in development-----------------------------");
+	// console.log(e);
 	// console.log(JSON.stringify(e));
 });

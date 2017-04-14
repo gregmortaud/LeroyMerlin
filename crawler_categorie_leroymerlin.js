@@ -126,8 +126,7 @@ function findCategorie1(result, callback) {
       });
 
 			findCategorie2(result, function(result) {
-        count = 13;
-				// count++;
+				count++;
 				callbackLoop();
 			});
 	  },
@@ -165,7 +164,6 @@ function loadPage(searchLinkUrl, result, callback) {
 	  });
 };
 
-// fs.writeFile(result.fileName, JSON.stringify({ a:1, b:2, c:3 }, null, 4));
 
 function writeFileFunction(result, callback) {
   var string = JSON.stringify(result.crawlResult);
@@ -269,6 +267,4 @@ crawl({
 }, function (e)
 {
 	console.log("-----------------------------------------------------");
-	// console.log(e);
-	// console.log(JSON.stringify(e));
 });
