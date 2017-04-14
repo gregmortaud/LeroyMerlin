@@ -1,0 +1,27 @@
+{
+  "name": "leroymerlin",
+  "version": "1.0.0",
+  "description": "Crawler product",
+  "main": "crawler_leroymerlin.js",
+  "dependencies": {
+    "async": "^2.3.0",
+    "async-waterfall": "^0.1.5",
+    "cheerio": "^0.22.0",
+    "events": "^1.1.1",
+    "request": "^2.81.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gregmortaud/LeroyMerlin.git"
+  },
+  "author": "gregoire_mortaud",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/gregmortaud/LeroyMerlin/issues"
+  },
+  "homepage": "https://github.com/gregmortaud/LeroyMerlin#readme"
+}
