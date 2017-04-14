@@ -126,7 +126,8 @@ function findCategorie1(result, callback) {
       });
 
 			findCategorie2(result, function(result) {
-				count++;
+        count = 13;
+				// count++;
 				callbackLoop();
 			});
 	  },
@@ -166,6 +167,19 @@ function loadPage(searchLinkUrl, result, callback) {
 
 // fs.writeFile(result.fileName, JSON.stringify({ a:1, b:2, c:3 }, null, 4));
 
+function writeFileFunction(result, callback) {
+  var string = JSON.stringify(result.crawlResult);
+  fs.writeFile(result.fileName, string, (err) => {
+    if (err) {
+      result.error = "Error file not saved";
+      callback(result);
+      return ;
+    }
+    console.log('The file '+result.fileName+' has been saved! Enjoy ;)');
+    callback(result);
+  });
+  return ;
+};
 
 var crawl = function(searchLinkUrl, cb)
 {
@@ -212,11 +226,25 @@ var crawl = function(searchLinkUrl, cb)
 				}
 			});
 	  },
-	  function(result, callback){
+    function(result, callback){
 			logger("info", "Crawler findCategorie1 starting");
 			findCategorie1(result, function(result) {
 				if (result.error != null) {
 					logger("error", "Crawler findCategorie1 failed");
+					cb(result);
+					return ;
+				}
+				else {
+					logger("info", "Done");
+					callback(null, result);
+				}
+			});
+	  },
+    function(result, callback){
+			logger("info", "Writing JSON file");
+			writeFileFunction(result, function(result) {
+				if (result.error != null) {
+					logger("error", "Writing JSON file");
 					cb(result);
 					return ;
 				}
