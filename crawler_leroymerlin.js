@@ -2,6 +2,7 @@ var cheerio = require("cheerio");
 var request = require("request");
 var async = require("async");
 var waterfall = require('async-waterfall');
+var fs = require("fs");
 
 var logger = function (level, message)
 {
@@ -21,16 +22,14 @@ function loadFinalProduit(result, callback) {
 			result.productObject.price = result.bodyFinalProduct("aside.price-container p.price").text();
 			//result.productObject.information = result.bodyFinalProduct("[itemprop='description']").text().trim();
 			logger("info", "Product Page "+ (result.limitEachProduit +1) + "/" + result.limitDetailProduits);
-			result.crawlResult.push(result.productObject);
-			// console.log("Name Product:");
-			// console.log(result.nameProduct);
-			// console.log("Price Product:");
-			// console.log(result.priceProduct);
-			// console.log("Detail Product:");
-			// console.log(result.detailProduct);
-			// console.log("------" + (result.limitEachProduit +1) + "/" + result.limitDetailProduits +"-------------- Produit suivants ----->>>>>>>>");
-			// console.log(result.bodyFinalProduct("[itemprop='description']").text().trim());
-			// result.limitProduits = result.bodyDetailProduits("[itemtype='http://schema.org/Product']").length;
+			// result.crawlResult.push(result.productObject);
+			result.crawlResult.push({
+				name: result.productObject.name,
+				price: result.productObject.price,
+				categorie1: result.productObject.categorie1,
+				categorie2: result.productObject.categorie2,
+				categorie3: result.productObject.categorie3
+			});
 			callback(result);
 			return ;
 		}
@@ -48,12 +47,14 @@ function loadEachProduits(result, callback) {
 	var count = 0;
 	async.whilst(
 		function () { return count < limit; },
-		function (callback) {
+		function (callbackLoop) {
 			result.limitEachProduit = count;
 			result.urlEachProduit = result.bodyDetailProduits("[itemtype='http://schema.org/Product'] h3 a")[count].attribs.href;
 			loadFinalProduit(result, function(result) {
-				count++;
-				callback();
+				console.log("loadEachProduits---------");
+				count = limit;
+				//count++;
+				callbackLoop();
 			});
 		},
 		function (err) {
@@ -64,8 +65,7 @@ function loadEachProduits(result, callback) {
 				return ;
 			}
 			else {
-				callback();
-				return ;
+				callback(result);
 			}
 		}
 	);
@@ -76,6 +76,13 @@ function loadDetailProduitsPage(result, callback) {
 		if (!error && response.statusCode == 200) {
 			result.bodyDetailProduits = cheerio.load(body);
 			result.limitDetailProduits = result.bodyDetailProduits("[itemtype='http://schema.org/Product']").length;
+			console.log("-------------------------");
+			console.log(result.limitDetailProduits);
+			if (result.limitDetailProduits < 1) {
+				console.log(result.bodyDetailProduits("section.items-content > div.container-product "));//div.container-product
+				// result.limitDetailProduits = result.bodyDetailProduits("div.container-product").length;
+				// console.log(result.limitDetailProduits);
+			}
 			callback(result);
 			return ;
 		}
@@ -93,7 +100,7 @@ function findCategorie3(result, callback) {
 	var count = 0;
 	async.whilst(
 		function () { return count < limit; },
-		function (callback) {
+		function (callbackLoop) {
 			result.urlProduitsPage = result.bodyProduits("div.sidebar li a")[count].attribs.href;
 			// console.log(result.bodyProduits("div.sidebar li a")[count].attribs.href);
 			// console.log(result.bodyProduits("div.sidebar li a")[count].children[0].data);
@@ -105,8 +112,10 @@ function findCategorie3(result, callback) {
 			// console.log("-------------------NEW Product Page loading-------------------");
 			loadDetailProduitsPage(result, function(result) {
 				loadEachProduits(result, function(result) {
-					count++;
-					callback();
+					// count++;
+					count = limit;
+					console.log("findCategorie3---------");
+					callbackLoop();
 				});
 			});
 		},
@@ -116,6 +125,9 @@ function findCategorie3(result, callback) {
 				result.error = "findCategorie3 failed";
 				result.cb(result);
 				return ;
+			}
+			else {
+				callback(result);
 			}
 		}
 	);
@@ -144,7 +156,7 @@ function findCategorie2(result, callback) {
 	var limit = result.bodyAcceuil(result.underCategorie).find("ul.sousColonne > li").length;
 	async.whilst(
 	  function () { return count < limit; },
-	  function (callback) {
+	  function (callbackLoop) {
 			// console.log(result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].attribs.href);
 			logger("info", "loading Categorie2 - "+(count+1)+"/"+limit+" - "+result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data);
 			result.urlUnderUnderCat = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].attribs.href;
@@ -153,13 +165,23 @@ function findCategorie2(result, callback) {
 			// console.log("---------------- hello- ------------------");
 			loadProduitsPage(result, function(result) {
 				findCategorie3(result, function(result) {
-					count++;
-					callback();
+					count = limit;
+					//count++;
+					console.log("findCategorie2---------");
+					callbackLoop();
 				});
 			});
 	  },
 	  function (err) {
-			return ;
+			if (err) {
+				logger("error", "findCategorie2 failed");
+				result.error = "findCategorie2 failed";
+				result.cb(result);
+				return ;
+			}
+			else {
+				callback(result);
+			}
 	  }
 	);
 };
@@ -170,18 +192,24 @@ function findCategorie1(result, callback) {
 	var tabLi = result.bodyAcceuil("li.linkHeader");
 	async.whilst(
 	  function () { return count < 13; },
-	  function (cb) {
+	  function (callbackLoop) {
 			// console.log(result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text());
 			logger("info", "loading Categorie1 - "+(count+1)+"/13 - "+result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text());
 			result.productObject.categorie1 = result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text();
 			result.underCategorie = result.bodyAcceuil(tabLi[count]);
 			findCategorie2(result, function(result) {
 				count++;
-				cb();
+				console.log("findCategorie1---------");
+				console.log(result.crawlResult);
+				callbackLoop();
 			});
 	  },
 	  function (err) {
-      callback(result);
+			if (err) {
+				result.error = "Error Categorie1";
+				result.cb(result);
+			}
+			callback(result);
 			return ;
 	  }
 	);
@@ -210,6 +238,9 @@ function loadPage(searchLinkUrl, result, callback) {
 	  });
 };
 
+// fs.writeFile(result.fileName, JSON.stringify({ a:1, b:2, c:3 }, null, 4));
+
+
 var crawl = function(searchLinkUrl, cb)
 {
 	var jsonFile = null;
@@ -219,14 +250,6 @@ var crawl = function(searchLinkUrl, cb)
 	else {
 		jsonFile = process.argv[2] + ".json";
 	}
-	var productObject = {
-		name: null,
-		price: null,
-		information: null,
-		categorie1: null,
-		categorie2: null,
-		categorie3: null
-	};
 	var result = {
 		fileName: jsonFile,
 		error: null,
@@ -238,7 +261,14 @@ var crawl = function(searchLinkUrl, cb)
 		underUnderCatBody: null,
 		urlProduitsPage: null,
 		crawlResult: [],
-		productObject: productObject
+		productObject: {
+			name: null,
+			price: null,
+			information: null,
+			categorie1: null,
+			categorie2: null,
+			categorie3: null
+		}
 	};
 
 	waterfall([
@@ -285,5 +315,6 @@ crawl({
 }, function (e)
 {
 	console.log("-----------------------------------------------------");
-	console.log(JSON.stringify(e));
+	console.log(e);
+	// console.log(JSON.stringify(e));
 });
