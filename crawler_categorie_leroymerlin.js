@@ -64,6 +64,30 @@ function loadProduitsPage(result, callback) {
 	});
 };
 
+function loadCategorie2(result, callback) {
+	request("https://www.leroymerlin.fr" + result.urlToRequest, function (error, response, body) {
+		if (!error && response.statusCode == 200) {
+			result.bodyCategorie2 = cheerio.load(body);
+			result.limitCategorie2 = result.bodyCategorie2("section.centerContent li.container").length;
+			callback(result);
+			return ;
+		}
+    else if (error == null && response.statusCode == 500) {
+      result.error = 500;
+      callback(result);
+      return ;
+    }
+		else {
+			logger("error", "loadCategorie2 failed");
+			result.error = "loadCategorie2 failed";
+			result.cb(result);
+			return ;
+		}
+	});
+};
+
+
+
 function findCategorie2(result, callback) {
 	var count = 0;
 	var limit = result.bodyAcceuil(result.underCategorie).find("ul.sousColonne > li").length;
@@ -72,24 +96,34 @@ function findCategorie2(result, callback) {
 	  function (callbackLoop) {
 			logger("info", "loading Categorie2 - "+(count+1)+"/"+limit+" - "+result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data);
 			result.urlUnderUnderCat = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].attribs.href;
-      result.productObject.category = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data;
-      result.categorie2 = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data;
-      result.crawlResult.push({
-        parent_category: result.categorie1,
-        category: result.productObject.category,
-				image: null
-			});
-			loadProduitsPage(result, function(result) {
-        if (result.error == 500) {
-          logger("error", "Page "+result.productObject.category+" failed");
-          result.error = null;
-          count++;
-          callbackLoop();
-          return ;
-        }
-				findCategorie3(result, function(result) {
+			loadCategorie2(result, function(result) {
+				result.productObject.category = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data;
+				if (result.error == 500) {
+					logger("error", "Page "+result.productObject.category+" failed");
+					result.error = null;
 					count++;
 					callbackLoop();
+					return ;
+				}
+				result.categorie2 = result.productObject.category;
+				result.productObject.imageCategorie2 = result.bodyCategorie2("section.centerContent li.container img")[count].attribs['data-src'];
+				result.crawlResult.push({
+	        parent_category: result.categorie1,
+	        category: result.productObject.category,
+					image: result.productObject.imageCategorie2
+				});
+				loadProduitsPage(result, function(result) {
+	        if (result.error == 500) {
+	          logger("error", "Page "+result.productObject.category+" failed");
+	          result.error = null;
+	          count++;
+	          callbackLoop();
+	          return ;
+	        }
+					findCategorie3(result, function(result) {
+						count++;
+						callbackLoop();
+					});
 				});
 			});
 	  },
@@ -107,14 +141,13 @@ function findCategorie2(result, callback) {
 	);
 };
 
-
 function findCategorie1(result, callback) {
 	var count = 0;
 	var tabLi = result.bodyAcceuil("li.linkHeader");
 	async.whilst(
-	  function () { return count < 13; },
+	  function () { return count < 12; },
 	  function (callbackLoop) {
-			logger("info", "loading Categorie1 - ["+(count+1)+"/13] - "+result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text());
+			logger("info", "loading Categorie1 - ["+(count+1)+"/12] - "+result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text());
       result.productObject.parent_category = null;
       result.categorie1 = result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text();
       result.productObject.category = result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text();
@@ -124,7 +157,7 @@ function findCategorie1(result, callback) {
         category: result.productObject.category,
         image: null
       });
-
+			result.urlToRequest = result.bodyAcceuil("div.onglet-content a")[count].attribs.href;
 			findCategorie2(result, function(result) {
 				count++;
 				callbackLoop();
