@@ -12,34 +12,192 @@ var logger = function (level, message)
 	console.log('{"level":"' + level.toUpperCase() + '", "site": "Leroy Merlin", "message": "' + message + '"}');
 };
 
+var nbProduit = 1;
 
 function loadFinalProduit(result, callback) {
-	logger("info", "Product Page loading");
-	request("https://www.leroymerlin.fr" + result.urlEachProduit, function (error, response, body) {
-		if (!error && response.statusCode == 200) {
-			result.bodyFinalProduct = cheerio.load(body);
-			result.productObject.name = result.bodyFinalProduct("header [itemprop='name']").text();
-			result.productObject.price = result.bodyFinalProduct("aside.price-container p.price").text();
-			//result.productObject.information = result.bodyFinalProduct("[itemprop='description']").text().trim();
-			logger("info", "Product Page "+ (result.limitEachProduit +1) + "/" + result.limitDetailProduits);
-			// result.crawlResult.push(result.productObject);
-			result.crawlResult.push({
-				name: result.productObject.name,
-				price: result.productObject.price,
-				categorie1: result.productObject.categorie1,
-				categorie2: result.productObject.categorie2,
-				categorie3: result.productObject.categorie3
-			});
-			callback(result);
-			return ;
-		}
-		else {
-			logger("error", "loadFinalProduit failed");
-			result.error = "loadFinalProduit failed";
-			result.cb(result);
-			return ;
-		}
-	});
+	var isLoaded = false;
+	var numberOfWhile = 0;
+
+	setTimeout(function() {
+		async.whilst(
+			function () { return isLoaded == false; },
+			function (callbackIsLoaded) {
+				request("https://www.leroymerlin.fr" + result.urlEachProduit, function (error, response, body) {
+					if (error || response.statusCode != 200) {
+						numberOfWhile ++;
+						if (numberOfWhile > 0) {
+							logger("INFO", "request reloading...");
+						}
+						if (numberOfWhile > 50) {
+							logger("error", "---- Product Page failed to Request ----");
+							result.error = "Product Page failed to request";
+							result.cb(result);
+							return ;
+						}
+						callbackIsLoaded();
+						return ;
+
+					}
+					else {
+						isLoaded = true;
+						logger("info", "Product Page "+ (result.limitEachProduit +1) + "/" + result.limitDetailProduits);
+						var name = null;
+						var price = null;
+						var reference = null;
+						var score = null;
+						var description = null;
+						var descriptionTechnique = null;
+						var lot = null;//a faire
+						var downloadLink = null;
+						var imgObject = [];
+						var productComp = [];
+						var categorieParent = result.productObject.categorieParent;
+						result.bodyFinalProduct = cheerio.load(body);
+
+						name = result.bodyFinalProduct("header [itemprop='name']").text().trim();
+						if (result.bodyFinalProduct("div.header-objet-connecte-description p.price strong").text() == "")
+							price = result.bodyFinalProduct("div.price-wrapper p.price strong")[0].children[0].data;
+						else
+							price = result.bodyFinalProduct("div.header-objet-connecte-description p.price strong").text();
+						reference = result.bodyFinalProduct("#global-reflm").text().trim();
+						var regexp = /Réf([\n-a-zA-Z0-9-:_.]+)/ig;
+						var exp = regexp.exec(reference);
+						if (exp) {
+							reference = exp[1].trim();
+						}
+						else {
+							logger("info", "Reference not found");
+							reference = null;
+						}
+
+						if (!result.bodyFinalProduct("p.reviews-synthesis-score strong")[0].children[0]) {
+							score = null;
+							logger("info", "Score not available");
+						}
+						else
+							score = result.bodyFinalProduct("p.reviews-synthesis-score strong")[0].children[0].data;
+						description = result.bodyFinalProduct("div.header-objet-connecte-description p.description").text().trim();
+						descriptionTechnique = result.bodyFinalProduct("section.objet-connecte-caracteristiques-techniques div.caracteristiques-techniques-liste").text().trim();
+						descriptionTechnique = descriptionTechnique.replace(/  /g,"");
+						descriptionTechnique = descriptionTechnique.replace(/\n/g,":");
+						descriptionTechnique = descriptionTechnique.replace(/:::/g,"\n");
+						for (var i = 0; i < result.bodyFinalProduct("div.content-carousel a").length; i++) {
+							result.productObject["img_"+i] = result.bodyFinalProduct("div.content-carousel a")[i].attribs['data-zoom-image'];
+							imgObject.push({
+								["img_"+i]: result.bodyFinalProduct("div.content-carousel a")[i].attribs['data-zoom-image']
+							});
+						}
+						for (var i = 0; i < result.bodyFinalProduct("section.push-complementaire").length; i++) {
+							result.productObject["productComp_"+i] = "https://www.leroymerlin.fr" + result.bodyFinalProduct("section.push-complementaire h3 a")[i].attribs.href;
+							productComp.push({
+								["productComp_"+i]: "https://www.leroymerlin.fr" + result.bodyFinalProduct("section.push-complementaire h3 a")[i].attribs.href
+							});
+						}
+						if (!result.bodyFinalProduct("div.download-content a")[0])
+							logger("info", "Product Page: downloadLink not available");
+						else
+							downloadLink = result.bodyFinalProduct("div.download-content a")[0].attribs.href;
+						result.productObject.counter ++;
+						result.crawlResult.push({name, price, reference, categorieParent,
+							score, description, descriptionTechnique, lot, downloadLink, imgObject, productComp});//ne pas oublier rajouter descriptionTechnique
+
+							callbackIsLoaded();
+							return ;
+					}
+				});
+			},
+			function () {
+				callback(result);
+				return ;
+			}
+		);
+	}, 1000);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	// request("https://www.leroymerlin.fr" + result.urlEachProduit, function (error, response, body) {
+	// 	if (!error && response.statusCode == 200) {
+	// 		logger("info", "Product Page "+ (result.limitEachProduit +1) + "/" + result.limitDetailProduits);
+	// 		var name = null;
+	// 		var price = null;
+	// 		var reference = null;
+	// 		var score = null;
+	// 		var description = null;
+	// 		var descriptionTechnique = null;
+	// 		var lot = null;//a faire
+	// 		var downloadLink = null;
+	// 		var imgObject = [];
+	// 		var productComp = [];
+	// 		var categorieParent = result.productObject.categorieParent;
+	// 		result.bodyFinalProduct = cheerio.load(body);
+	//
+	// 		name = result.bodyFinalProduct("header [itemprop='name']").text().trim();
+	// 		if (result.bodyFinalProduct("div.header-objet-connecte-description p.price strong").text() == "")
+	// 			price = result.bodyFinalProduct("div.price-wrapper p.price strong")[0].children[0].data;
+	// 		else
+	// 			price = result.bodyFinalProduct("div.header-objet-connecte-description p.price strong").text();
+	// 		reference = result.bodyFinalProduct("#global-reflm").text().trim();
+	// 		var regexp = /Réf([\n-a-zA-Z0-9-:_.]+)/ig;
+	// 		var exp = regexp.exec(reference);
+	// 		if (exp) {
+	// 			reference = exp[1].trim();
+	// 		}
+	// 		else {
+	// 			logger("info", "Reference not found");
+	// 			reference = null;
+	// 		}
+	//
+	// 		if (!result.bodyFinalProduct("p.reviews-synthesis-score strong")[0].children[0]) {
+	// 			score = null;
+	// 			logger("info", "Score not available");
+	// 		}
+	// 		else
+	// 			score = result.bodyFinalProduct("p.reviews-synthesis-score strong")[0].children[0].data;
+	// 		description = result.bodyFinalProduct("div.header-objet-connecte-description p.description").text().trim();
+	// 		descriptionTechnique = result.bodyFinalProduct("section.objet-connecte-caracteristiques-techniques div.caracteristiques-techniques-liste").text().trim();
+	// 		for (var i = 0; i < result.bodyFinalProduct("div.content-carousel a").length; i++) {
+	// 			result.productObject["img_"+i] = result.bodyFinalProduct("div.content-carousel a")[i].attribs['data-zoom-image'];
+	// 			imgObject.push({
+	// 				["img_"+i]: result.bodyFinalProduct("div.content-carousel a")[i].attribs['data-zoom-image']
+	// 			});
+	// 		}
+	// 		for (var i = 0; i < result.bodyFinalProduct("section.push-complementaire").length; i++) {
+	// 			result.productObject["productComp_"+i] = "https://www.leroymerlin.fr" + result.bodyFinalProduct("section.push-complementaire h3 a")[i].attribs.href;
+	// 			productComp.push({
+	// 				["productComp_"+i]: "https://www.leroymerlin.fr" + result.bodyFinalProduct("section.push-complementaire h3 a")[i].attribs.href
+	// 			});
+	// 		}
+	// 		if (!result.bodyFinalProduct("div.download-content a")[0])
+	// 			logger("info", "Product Page: downloadLink not available");
+	// 		else
+	// 			downloadLink = result.bodyFinalProduct("div.download-content a")[0].attribs.href;
+	// 		result.productObject.counter ++;
+	// 		result.crawlResult.push({name, price, reference, categorieParent,
+	// 			score, description, lot, downloadLink, imgObject, productComp});//ne pas oublier rajouter descriptionTechnique
+	//
+	// 		callback(result);
+	// 		return ;
+	// 	}
+	// 	else {
+	// 		logger("error", "---- Product Page failed to Request ----");
+	// 		result.error = "Product Page failed to request";
+	// 		result.cb(result);
+	// 		return ;
+	// 	}
+	// });
 };
 
 function loadEachProduits(result, callback) {
@@ -51,9 +209,8 @@ function loadEachProduits(result, callback) {
 			result.limitEachProduit = count;
 			result.urlEachProduit = result.bodyDetailProduits("[itemtype='http://schema.org/Product'] h3 a")[count].attribs.href;
 			loadFinalProduit(result, function(result) {
-				console.log("loadEachProduits---------");
-				count = limit;
 				//count++;
+				count = limit;
 				callbackLoop();
 			});
 		},
@@ -76,13 +233,6 @@ function loadDetailProduitsPage(result, callback) {
 		if (!error && response.statusCode == 200) {
 			result.bodyDetailProduits = cheerio.load(body);
 			result.limitDetailProduits = result.bodyDetailProduits("[itemtype='http://schema.org/Product']").length;
-			console.log("-------------------------");
-			console.log(result.limitDetailProduits);
-			if (result.limitDetailProduits < 1) {
-				console.log(result.bodyDetailProduits("section.items-content > div.container-product "));//div.container-product
-				// result.limitDetailProduits = result.bodyDetailProduits("div.container-product").length;
-				// console.log(result.limitDetailProduits);
-			}
 			callback(result);
 			return ;
 		}
@@ -102,19 +252,12 @@ function findCategorie3(result, callback) {
 		function () { return count < limit; },
 		function (callbackLoop) {
 			result.urlProduitsPage = result.bodyProduits("div.sidebar li a")[count].attribs.href;
-			// console.log(result.bodyProduits("div.sidebar li a")[count].attribs.href);
-			// console.log(result.bodyProduits("div.sidebar li a")[count].children[0].data);
-			// console.log("------------------------------------------");
-			// console.log(result.crawlResult);
 			logger("info", "loading Categorie3 - "+(count+1)+"/"+limit+" - "+result.bodyProduits("div.sidebar li a")[count].children[0].data);
-			result.productObject.categorie3 = result.bodyProduits("div.sidebar li a")[count].children[0].data;
-			// console.log(result.bodyAcceuil(result.bodyProduits).find("div.sidebar li"));
-			// console.log("-------------------NEW Product Page loading-------------------");
+			result.productObject.categorieParent = result.bodyProduits("div.sidebar li a")[count].children[0].data;
 			loadDetailProduitsPage(result, function(result) {
 				loadEachProduits(result, function(result) {
-					// count++;
+					//count ++;
 					count = limit;
-					console.log("findCategorie3---------");
 					callbackLoop();
 				});
 			});
@@ -137,7 +280,6 @@ function loadProduitsPage(result, callback) {
 	request("https://www.leroymerlin.fr" + result.urlUnderUnderCat, function (error, response, body) {
 		if (!error && response.statusCode == 200) {
 			result.bodyProduits = cheerio.load(body);
-			// console.log(result.bodyProduits("div.sidebar li").length);
 			result.limitProduits = result.bodyProduits("div.sidebar li").length;
 			callback(result);
 			return ;
@@ -157,17 +299,12 @@ function findCategorie2(result, callback) {
 	async.whilst(
 	  function () { return count < limit; },
 	  function (callbackLoop) {
-			// console.log(result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].attribs.href);
 			logger("info", "loading Categorie2 - "+(count+1)+"/"+limit+" - "+result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data);
 			result.urlUnderUnderCat = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].attribs.href;
-			result.productObject.categorie2 = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data;
-			// console.log(result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data);
-			// console.log("---------------- hello- ------------------");
 			loadProduitsPage(result, function(result) {
 				findCategorie3(result, function(result) {
+					//count ++;
 					count = limit;
-					//count++;
-					console.log("findCategorie2---------");
 					callbackLoop();
 				});
 			});
@@ -191,16 +328,12 @@ function findCategorie1(result, callback) {
 	var count = 0;
 	var tabLi = result.bodyAcceuil("li.linkHeader");
 	async.whilst(
-	  function () { return count < 13; },
+	  function () { return count < nbProduit; },//normal 13
 	  function (callbackLoop) {
-			// console.log(result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text());
 			logger("info", "loading Categorie1 - "+(count+1)+"/13 - "+result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text());
-			result.productObject.categorie1 = result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text();
 			result.underCategorie = result.bodyAcceuil(tabLi[count]);
 			findCategorie2(result, function(result) {
 				count++;
-				console.log("findCategorie1---------");
-				console.log(result.crawlResult);
 				callbackLoop();
 			});
 	  },
@@ -238,13 +371,22 @@ function loadPage(searchLinkUrl, result, callback) {
 	  });
 };
 
-// fs.writeFile(result.fileName, JSON.stringify({ a:1, b:2, c:3 }, null, 4));
-
+function writeFileFunction(result, callback) {
+  var string = JSON.stringify(result.crawlResult);
+  fs.writeFile(result.fileName, string, (err) => {
+    if (err) {
+      result.error = "Error file not saved";
+      callback(result);
+      return ;
+    }
+    console.log('The file '+result.fileName+' has been saved! Enjoy ;)');
+    callback(result);
+  });
+  return ;
+};
 
 var crawl = function(searchLinkUrl, cb)
 {
-	cb();
-	return ;
 	var jsonFile = null;
 	if (process.argv.length < 3) {
 		jsonFile = "leroymerlin.json";
@@ -262,14 +404,17 @@ var crawl = function(searchLinkUrl, cb)
 		urlUnderUnderCat: null,
 		underUnderCatBody: null,
 		urlProduitsPage: null,
+		categorie1: null,
+		categorie2: null,
+		categorie3: null,
 		crawlResult: [],
 		productObject: {
-			name: null,
-			price: null,
+			counter: 0,
 			information: null,
 			categorie1: null,
 			categorie2: null,
-			categorie3: null
+			categorie3: null,
+			lot:null
 		}
 	};
 
@@ -301,8 +446,23 @@ var crawl = function(searchLinkUrl, cb)
 					callback(null, result);
 				}
 			});
-	  }
+	  },
+		function(result, callback){
+			logger("info", "Writing JSON file");
+			writeFileFunction(result, function(result) {
+				if (result.error != null) {
+					logger("error", "Writing JSON file");
+					cb(result);
+					return ;
+				}
+				else {
+					logger("info", "Done");
+					callback(null, result);
+				}
+			});
+		}
 	], function (err, result) {
+		console.log("produit crawler: " + result.productObject.counter);
 		logger("info", "Crawler Done");
 		cb(result);
 	});
@@ -316,7 +476,7 @@ crawl({
 
 }, function (e)
 {
-	console.log("--------------------------Crawler in development-----------------------------");
+	console.log("--------------------------Crawler Done-----------------------------");
 	// console.log(e);
 	// console.log(JSON.stringify(e));
 });
