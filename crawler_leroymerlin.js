@@ -12,7 +12,16 @@ var logger = function (level, message)
 	console.log('{"level":"' + level.toUpperCase() + '", "site": "Leroy Merlin", "message": "' + message + '"}');
 };
 
-var nbProduit = 1;
+var nbProduit = 2;
+var resultSave = null;
+
+process.on('SIGINT', function() {
+    console.log("Caught interrupt signal");
+		console.log("nbProduct done: " + resultSave.productObject.counter);
+		writeFileFunction(resultSave, function(result) {
+			process.exit(1);
+		});
+});
 
 function loadFinalProduit(result, callback) {
 	var isLoaded = false;
@@ -23,15 +32,18 @@ function loadFinalProduit(result, callback) {
 			function () { return isLoaded == false; },
 			function (callbackIsLoaded) {
 				request("https://www.leroymerlin.fr" + result.urlEachProduit, function (error, response, body) {
-					if (error || response.statusCode != 200) {
+					if (error || response.statusCode != 200) {!
 						numberOfWhile ++;
-						if (numberOfWhile > 0) {
+						if (numberOfWhile == 1) {
 							logger("INFO", "request reloading...");
+							callbackIsLoaded();
+							return ;
 						}
 						if (numberOfWhile > 50) {
 							logger("error", "---- Product Page failed to Request ----");
 							result.error = "Product Page failed to request";
-							result.cb(result);
+							//result.cb(result);
+							callback(result);
 							return ;
 						}
 						callbackIsLoaded();
@@ -55,10 +67,14 @@ function loadFinalProduit(result, callback) {
 						result.bodyFinalProduct = cheerio.load(body);
 
 						name = result.bodyFinalProduct("header [itemprop='name']").text().trim();
-						if (result.bodyFinalProduct("div.header-objet-connecte-description p.price strong").text() == "")
-							price = result.bodyFinalProduct("div.price-wrapper p.price strong")[0].children[0].data;
-						else
-							price = result.bodyFinalProduct("div.header-objet-connecte-description p.price strong").text();
+						try {
+							if (result.bodyFinalProduct("div.header-objet-connecte-description p.price strong").text() == "")
+								price = result.bodyFinalProduct("div.price-wrapper p.price strong")[0].children[0].data;
+							else
+								price = result.bodyFinalProduct("div.header-objet-connecte-description p.price strong").text();
+						} catch (e) {
+							price = null;
+						}
 						reference = result.bodyFinalProduct("#global-reflm").text().trim();
 						var regexp = /Réf([\n-a-zA-Z0-9-:_.]+)/ig;
 						var exp = regexp.exec(reference);
@@ -69,8 +85,7 @@ function loadFinalProduit(result, callback) {
 							logger("info", "Reference not found");
 							reference = null;
 						}
-
-						if (!result.bodyFinalProduct("p.reviews-synthesis-score strong")[0].children[0]) {
+						if (!result.bodyFinalProduct("p.reviews-synthesis-score strong") || !result.bodyFinalProduct("p.reviews-synthesis-score strong")[0] || !result.bodyFinalProduct("p.reviews-synthesis-score strong")[0].children[0]) {
 							score = null;
 							logger("info", "Score not available");
 						}
@@ -204,13 +219,46 @@ function loadEachProduits(result, callback) {
 	var limit = result.limitDetailProduits;
 	var count = 0;
 	async.whilst(
-		function () { return count < limit; },
+		function () { return count < limit; },//remettre limit
 		function (callbackLoop) {
-			result.limitEachProduit = count;
-			result.urlEachProduit = result.bodyDetailProduits("[itemtype='http://schema.org/Product'] h3 a")[count].attribs.href;
+			try {
+				result.limitEachProduit = count;
+				result.urlEachProduit = result.bodyDetailProduits("[itemtype='http://schema.org/Product'] h3 a")[count].attribs.href;
+			} catch (e) {
+				console.log(result.urlProduitsPage);
+				if (result.urlProduitsPage == "/v3/p/produits/terrasse-jardin/grillage-canisse-panneau-cloture-et-palissade/composez-votre-panneau-de-cloture-l1500636302"
+				|| result.urlProduitsPage == "/v3/p/produits/decoration-eclairage/tringle-a-rideaux-barre-rail-et-cable/collections-de-tringles-a-rideaux-a-composer-l1401718868"
+				|| result.urlProduitsPage == "/v3/p/produits/cuisine/meuble-de-cuisine/cuisine-personnalisable-delinia-l1401014932"
+				|| result.urlProduitsPage == "/v3/p/services-l1401419633"
+				|| result.urlProduitsPage == "/v3/p/produits/salle-de-bains/meuble-de-salle-de-bains-et-vasque/meuble-de-salle-de-bains-vue-inspiration-l1401395067"
+				|| result.urlProduitsPage == "/v3/p/cuisine-sur-mesure-ingenious-l1401120364"//a partir d'en bas
+				|| result.urlProduitsPage == "/v3/p/produits/materiaux-menuiserie/isolation/isolation-des-combles-l1308218211"
+				|| result.urlProduitsPage == "/v3/p/produits/materiaux-menuiserie/isolation/isolation-des-sols-l1308218229"
+				|| result.urlProduitsPage == "/v3/p/produits/materiaux-menuiserie/cloison-et-plafond/plaque-de-platre-l1308217983"
+				|| result.urlProduitsPage == "/v3/p/produits/materiaux-menuiserie/cloison-et-plafond/ossature-metallique-pour-cloison-et-plafond-l1308217978"
+				|| result.urlProduitsPage == "/v3/p/produits/materiaux-menuiserie/cloison-et-plafond/carreau-de-platre-et-beton-cellulaire-l1308217929"
+				|| result.urlProduitsPage == "/v3/p/produits/materiaux-menuiserie/toiture-charpente-et-bardage/bardage-et-clin-l1308218568"
+				|| result.urlProduitsPage == "/v3/p/produits/decoration-eclairage/coussin-plaid-et-pouf/pouf-et-poire-l1308218663"
+				|| result.urlProduitsPage == "/v3/p/produits/decoration-eclairage/papier-peint-frise-et-fibre-de-verre/echantillon-de-papier-peint-l1500664215") {
+					count ++;
+					logger("info", "Detection crawl impossible - url skiped");
+					callbackLoop();
+					return ;
+				}
+				if (result.bodyDetailProduits("[itemtype='http://schema.org/ItemList']")) {
+					if (result.bodyDetailProduits("[itemtype='http://schema.org/ItemList'] a")[count]) {
+						if (result.bodyDetailProduits("[itemtype='http://schema.org/ItemList'] a")[count].attribs) {
+							result.urlEachProduit = result.bodyDetailProduits("[itemtype='http://schema.org/ItemList'] a")[count].attribs.href;
+						}
+					}
+				}
+			}
 			loadFinalProduit(result, function(result) {
-				//count++;
-				count = limit;
+				if (result.error) {
+					logger("info", "Url skiped detected");
+					result.error = null;
+				}
+				count++;
 				callbackLoop();
 			});
 		},
@@ -218,7 +266,8 @@ function loadEachProduits(result, callback) {
 			if (err) {
 				logger("error", "loadEachProduits failed");
 				result.error = "loadEachProduits failed";
-				result.cb(result);
+				callback(result);
+				//result.cb(result);
 				return ;
 			}
 			else {
@@ -239,7 +288,8 @@ function loadDetailProduitsPage(result, callback) {
 		else {
 			logger("error", "loadProduitsPage failed");
 			result.error = "loadProduitsPage failed";
-			result.cb(result);
+			//result.cb(result);
+			callback(result);
 			return ;
 		}
 	});
@@ -252,12 +302,19 @@ function findCategorie3(result, callback) {
 		function () { return count < limit; },
 		function (callbackLoop) {
 			result.urlProduitsPage = result.bodyProduits("div.sidebar li a")[count].attribs.href;
+			// result.urlProduitsPage = result.bodyProduits("div.sidebar li a")[2].attribs.href;
 			logger("info", "loading Categorie3 - "+(count+1)+"/"+limit+" - "+result.bodyProduits("div.sidebar li a")[count].children[0].data);
 			result.productObject.categorieParent = result.bodyProduits("div.sidebar li a")[count].children[0].data;
 			loadDetailProduitsPage(result, function(result) {
+				if (result.error) {
+					logger("error", "loadProduitsPage failed / skip");
+					result.error = null;
+					count ++;
+					callbackLoop();
+					return ;
+				}
 				loadEachProduits(result, function(result) {
-					//count ++;
-					count = limit;
+					count ++;
 					callbackLoop();
 				});
 			});
@@ -287,7 +344,8 @@ function loadProduitsPage(result, callback) {
 		else {
 			logger("error", "loadProduitsPage failed");
 			result.error = "loadProduitsPage failed";
-			result.cb(result);
+			callback(result);
+			//result.cb(result);
 			return ;
 		}
 	});
@@ -301,10 +359,17 @@ function findCategorie2(result, callback) {
 	  function (callbackLoop) {
 			logger("info", "loading Categorie2 - "+(count+1)+"/"+limit+" - "+result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].children[0].data);
 			result.urlUnderUnderCat = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[count].attribs.href;
+			// result.urlUnderUnderCat = result.bodyAcceuil(result.underCategorie[0]).find("ul.sousColonne > li > a")[3].attribs.href;
 			loadProduitsPage(result, function(result) {
+				if (result.error) {
+					logger("error", "loadProduitsPage failed / skip");
+					result.error = null;
+					count ++;
+					callbackLoop();
+					return ;
+				}
 				findCategorie3(result, function(result) {
-					//count ++;
-					count = limit;
+					count ++;
 					callbackLoop();
 				});
 			});
@@ -328,7 +393,7 @@ function findCategorie1(result, callback) {
 	var count = 0;
 	var tabLi = result.bodyAcceuil("li.linkHeader");
 	async.whilst(
-	  function () { return count < nbProduit; },//normal 13
+	  function () { return count < 13; },
 	  function (callbackLoop) {
 			logger("info", "loading Categorie1 - "+(count+1)+"/13 - "+result.bodyAcceuil(tabLi[count]).find("span.transparent-bloc-tab").text());
 			result.underCategorie = result.bodyAcceuil(tabLi[count]);
@@ -417,7 +482,7 @@ var crawl = function(searchLinkUrl, cb)
 			lot:null
 		}
 	};
-
+	resultSave = result;
 	waterfall([
 	  function(callback){
 			logger("info", "Crawling HomePage Starting");
